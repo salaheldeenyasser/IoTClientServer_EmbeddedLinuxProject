@@ -1,0 +1,14 @@
+[Match]
+Name=eth0
+
+[Network]
+# Change this to match your lab network.
+# For DHCP instead: uncomment DHCP=yes and remove the static block.
+# DHCP=yes
+
+Address=192.168.1.200/24
+Gateway=192.168.1.1
+DNS=8.8.8.8 8.8.4.4
+
+[Link]
+RequiredForOnline=yes
