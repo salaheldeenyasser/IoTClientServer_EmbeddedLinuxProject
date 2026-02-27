@@ -41,18 +41,18 @@ public:
     QGridLayout *gridLayout;
     QLCDNumber *lcdNumber;
     QSpacerItem *verticalSpacer_2;
-    QSpacerItem *verticalSpacer;
     QCheckBox *checkBox;
     QSpacerItem *horizontalSpacer_2;
     QLabel *label;
     QLabel *label_3;
-    QPushButton *connectButton;
+    QSpacerItem *verticalSpacer_4;
     QSlider *horizontalSlider;
     QSpacerItem *horizontalSpacer;
     QLabel *label_2;
     QSpacerItem *verticalSpacer_3;
     QCheckBox *checkBox_2;
-    QSpacerItem *verticalSpacer_4;
+    QSpacerItem *verticalSpacer;
+    QPushButton *connectButton;
     QWidget *tab_4;
     QHBoxLayout *horizontalLayout_2;
     QHBoxLayout *horizontalLayout;
@@ -132,13 +132,9 @@ public:
 
         gridLayout->addWidget(lcdNumber, 13, 2, 1, 1);
 
-        verticalSpacer_2 = new QSpacerItem(20, 200, QSizePolicy::Policy::Minimum, QSizePolicy::Policy::Expanding);
+        verticalSpacer_2 = new QSpacerItem(20, 200, QSizePolicy::Policy::Minimum, QSizePolicy::Policy::Minimum);
 
         gridLayout->addItem(verticalSpacer_2, 0, 2, 1, 1);
-
-        verticalSpacer = new QSpacerItem(5, 40, QSizePolicy::Policy::Minimum, QSizePolicy::Policy::Minimum);
-
-        gridLayout->addItem(verticalSpacer, 6, 2, 1, 1);
 
         checkBox = new QCheckBox(tab_3);
         checkBox->setObjectName("checkBox");
@@ -147,7 +143,7 @@ public:
 
         gridLayout->addWidget(checkBox, 2, 2, 1, 1);
 
-        horizontalSpacer_2 = new QSpacerItem(220, 20, QSizePolicy::Policy::Expanding, QSizePolicy::Policy::Minimum);
+        horizontalSpacer_2 = new QSpacerItem(220, 20, QSizePolicy::Policy::Minimum, QSizePolicy::Policy::Minimum);
 
         gridLayout->addItem(horizontalSpacer_2, 8, 3, 1, 1);
 
@@ -161,14 +157,13 @@ public:
         label_3 = new QLabel(tab_3);
         label_3->setObjectName("label_3");
         label_3->setStyleSheet(QString::fromUtf8("QLabel { font-size:15px; font-weight:bold; padding:8px; }"));
+        label_3->setAlignment(Qt::AlignmentFlag::AlignCenter);
 
         gridLayout->addWidget(label_3, 8, 2, 1, 1);
 
-        connectButton = new QPushButton(tab_3);
-        connectButton->setObjectName("connectButton");
-        connectButton->setCheckable(false);
+        verticalSpacer_4 = new QSpacerItem(20, 10, QSizePolicy::Policy::Minimum, QSizePolicy::Policy::Minimum);
 
-        gridLayout->addWidget(connectButton, 4, 2, 1, 1);
+        gridLayout->addItem(verticalSpacer_4, 11, 2, 1, 1);
 
         horizontalSlider = new QSlider(tab_3);
         horizontalSlider->setObjectName("horizontalSlider");
@@ -181,7 +176,7 @@ public:
 
         gridLayout->addWidget(horizontalSlider, 10, 2, 1, 1);
 
-        horizontalSpacer = new QSpacerItem(220, 20, QSizePolicy::Policy::Expanding, QSizePolicy::Policy::Minimum);
+        horizontalSpacer = new QSpacerItem(220, 20, QSizePolicy::Policy::Minimum, QSizePolicy::Policy::Minimum);
 
         gridLayout->addItem(horizontalSpacer, 8, 1, 1, 1);
 
@@ -192,7 +187,7 @@ public:
 
         gridLayout->addWidget(label_2, 1, 2, 1, 1);
 
-        verticalSpacer_3 = new QSpacerItem(20, 120, QSizePolicy::Policy::Minimum, QSizePolicy::Policy::Expanding);
+        verticalSpacer_3 = new QSpacerItem(20, 200, QSizePolicy::Policy::Minimum, QSizePolicy::Policy::Minimum);
 
         gridLayout->addItem(verticalSpacer_3, 14, 2, 1, 1);
 
@@ -201,9 +196,15 @@ public:
 
         gridLayout->addWidget(checkBox_2, 3, 2, 1, 1);
 
-        verticalSpacer_4 = new QSpacerItem(20, 10, QSizePolicy::Policy::Minimum, QSizePolicy::Policy::Minimum);
+        verticalSpacer = new QSpacerItem(20, 5, QSizePolicy::Policy::Minimum, QSizePolicy::Policy::Minimum);
 
-        gridLayout->addItem(verticalSpacer_4, 11, 2, 1, 1);
+        gridLayout->addItem(verticalSpacer, 6, 2, 1, 1);
+
+        connectButton = new QPushButton(tab_3);
+        connectButton->setObjectName("connectButton");
+        connectButton->setCheckable(false);
+
+        gridLayout->addWidget(connectButton, 4, 2, 2, 1);
 
 
         horizontalLayout_4->addLayout(gridLayout);
@@ -273,7 +274,7 @@ public:
         QObject::connect(checkBox_2, &QCheckBox::clicked, checkBox, qOverload<>(&QCheckBox::toggle));
         QObject::connect(checkBox, &QCheckBox::clicked, checkBox_2, qOverload<>(&QCheckBox::toggle));
 
-        tabWidget->setCurrentIndex(0);
+        tabWidget->setCurrentIndex(2);
 
 
         QMetaObject::connectSlotsByName(MainWindow);
@@ -285,11 +286,11 @@ public:
         tabWidget->setTabText(tabWidget->indexOf(tab_2), QCoreApplication::translate("MainWindow", "Real Time Monitor", nullptr));
         tabWidget->setTabText(tabWidget->indexOf(tab), QCoreApplication::translate("MainWindow", "Historical Analysis", nullptr));
         checkBox->setText(QCoreApplication::translate("MainWindow", "TCP", nullptr));
-        label->setText(QCoreApplication::translate("MainWindow", "Current threshold (\302\260C):", nullptr));
-        label_3->setText(QCoreApplication::translate("MainWindow", "Slide to configure the temperature threshold", nullptr));
-        connectButton->setText(QCoreApplication::translate("MainWindow", "Connect", nullptr));
+        label->setText(QCoreApplication::translate("MainWindow", "Current Threshold (\302\260C):", nullptr));
+        label_3->setText(QCoreApplication::translate("MainWindow", "Slide to configure the temperature threshold:", nullptr));
         label_2->setText(QCoreApplication::translate("MainWindow", "Select Connection Type: ", nullptr));
         checkBox_2->setText(QCoreApplication::translate("MainWindow", "UDP", nullptr));
+        connectButton->setText(QCoreApplication::translate("MainWindow", "Connect", nullptr));
         tabWidget->setTabText(tabWidget->indexOf(tab_3), QCoreApplication::translate("MainWindow", "Configuration", nullptr));
 #if QT_CONFIG(tooltip)
         pushButton->setToolTip(QCoreApplication::translate("MainWindow", "Open Facebook \342\200\223 Edges For Training", nullptr));
