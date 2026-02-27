@@ -1,0 +1,27 @@
+{
+	"BUILD_DIR" : "/home/seyho/Embedded_Linux_Diploma/EmbeddedLinuxFinalProject/CommApp/untitled/build/Desktop_Qt_6_8_3-Debug/IoTServer_autogen",
+	"CMAKE_BINARY_DIR" : "/home/seyho/Embedded_Linux_Diploma/EmbeddedLinuxFinalProject/CommApp/untitled/build/Desktop_Qt_6_8_3-Debug",
+	"CMAKE_CURRENT_BINARY_DIR" : "/home/seyho/Embedded_Linux_Diploma/EmbeddedLinuxFinalProject/CommApp/untitled/build/Desktop_Qt_6_8_3-Debug",
+	"CMAKE_CURRENT_SOURCE_DIR" : "/home/seyho/Embedded_Linux_Diploma/EmbeddedLinuxFinalProject/CommApp/CommAppQT",
+	"CMAKE_SOURCE_DIR" : "/home/seyho/Embedded_Linux_Diploma/EmbeddedLinuxFinalProject/CommApp/CommAppQT",
+	"GENERATOR" : "Ninja",
+	"INCLUDE_DIR" : "/home/seyho/Embedded_Linux_Diploma/EmbeddedLinuxFinalProject/CommApp/untitled/build/Desktop_Qt_6_8_3-Debug/IoTServer_autogen/include",
+	"INPUTS" : 
+	[
+		"/home/seyho/Embedded_Linux_Diploma/EmbeddedLinuxFinalProject/CommApp/CommAppQT/Gauge.qml",
+		"/home/seyho/Embedded_Linux_Diploma/EmbeddedLinuxFinalProject/CommApp/CommAppQT/Imagesandicons/linkedin.png",
+		"/home/seyho/Embedded_Linux_Diploma/EmbeddedLinuxFinalProject/CommApp/CommAppQT/Imagesandicons/facebook-app-symbol.png",
+		"/home/seyho/Embedded_Linux_Diploma/EmbeddedLinuxFinalProject/CommApp/CommAppQT/Imagesandicons/instagram.png",
+		"/home/seyho/Embedded_Linux_Diploma/EmbeddedLinuxFinalProject/CommApp/CommAppQT/Imagesandicons/Background.jpg"
+	],
+	"LOCK_FILE" : "/home/seyho/Embedded_Linux_Diploma/EmbeddedLinuxFinalProject/CommApp/untitled/build/Desktop_Qt_6_8_3-Debug/CMakeFiles/IoTServer_autogen.dir/AutoRcc_Photos_EWIEGA46WW_Lock.lock",
+	"MULTI_CONFIG" : false,
+	"OPTIONS" : [ "-name", "Photos" ],
+	"OUTPUT_CHECKSUM" : "EWIEGA46WW",
+	"OUTPUT_NAME" : "qrc_Photos.cpp",
+	"RCC_EXECUTABLE" : "/home/seyho/Qt/6.8.3/gcc_64/libexec/rcc",
+	"RCC_LIST_OPTIONS" : [ "--list" ],
+	"SETTINGS_FILE" : "/home/seyho/Embedded_Linux_Diploma/EmbeddedLinuxFinalProject/CommApp/untitled/build/Desktop_Qt_6_8_3-Debug/CMakeFiles/IoTServer_autogen.dir/AutoRcc_Photos_EWIEGA46WW_Used.txt",
+	"SOURCE" : "/home/seyho/Embedded_Linux_Diploma/EmbeddedLinuxFinalProject/CommApp/CommAppQT/Photos.qrc",
+	"VERBOSITY" : 0
+}

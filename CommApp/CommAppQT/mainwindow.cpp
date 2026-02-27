@@ -8,6 +8,11 @@
 #include <QPainter>
 #include <QtCharts/QChart>
 
+// POSIX socket API used directly through Socket.h / Channel.h
+#include <sys/socket.h>
+#include <unistd.h>
+#include <cstring>
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  Constructor
 // ─────────────────────────────────────────────────────────────────────────────
@@ -17,69 +22,68 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
-    // ── Configuration tab: slider ──────────────────────────────────────────
+    // ── Configuration tab: slider ─────────────────────────────────────────────
     ui->horizontalSlider->setMinimum(0);
     ui->horizontalSlider->setMaximum(100);
     ui->horizontalSlider->setValue(static_cast<int>(m_threshold));
     ui->lcdNumber->display(static_cast<int>(m_threshold));
-
     connect(ui->horizontalSlider, &QSlider::sliderMoved,
             this, &MainWindow::onSliderMoved);
 
-    // ── Build the two dynamic tabs ─────────────────────────────────────────
+    // ── Configuration tab: checkboxes ─────────────────────────────────────────
+    // The .ui already sets checkBox (TCP) = checked and wires the two
+    // checkboxes so clicking one toggles the other (mutual exclusion).
+    // No extra code needed here — we simply read isChecked() on Connect.
+
+    // ── Build dynamic tabs ────────────────────────────────────────────────────
     setupGaugeTab();
     setupChartTab();
 
-    // ── Start TCP/UDP server ───────────────────────────────────────────────
-    setupNetworking();
+    // ── Protocol timer — starts only when a client is connected ──────────────
+    m_serverTimer = new QTimer(this);
+    m_serverTimer->setInterval(1000);
+    connect(m_serverTimer, &QTimer::timeout, this, &MainWindow::onServerTick);
+
+    // Set initial button appearance
+    updateConnectButton();
 }
 
 MainWindow::~MainWindow()
 {
+    stopServer();
     delete ui;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Tab 1 – Real Time Monitor  (QML gauge embedded in QQuickWidget)
+//  Tab 1 – Real Time Monitor
 // ─────────────────────────────────────────────────────────────────────────────
 void MainWindow::setupGaugeTab()
 {
-    QWidget *tab = ui->tab_2;               // "Real Time Monitor" tab
+    QWidget *tab = ui->tab_2;
     auto *layout = new QVBoxLayout(tab);
     layout->setContentsMargins(24, 24, 24, 24);
     layout->setSpacing(14);
     layout->setAlignment(Qt::AlignCenter);
 
-    // Connection status label
-    m_monitorStatus = new QLabel("Waiting for client connection…", tab);
+    m_monitorStatus = new QLabel(
+        "Not connected — select protocol and press Connect.", tab);
     m_monitorStatus->setAlignment(Qt::AlignCenter);
     m_monitorStatus->setStyleSheet(
         "color:#aaaaaa; font-size:13px; padding:4px;");
     layout->addWidget(m_monitorStatus);
 
-    // QQuickWidget hosting Gauge.qml
     m_gaugeWidget = new QQuickWidget(tab);
     m_gaugeWidget->setMinimumSize(650, 650);
     m_gaugeWidget->setMaximumSize(900, 900);
     m_gaugeWidget->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
     m_gaugeWidget->setResizeMode(QQuickWidget::SizeRootObjectToView);
-
-    // Make the QQuickWidget background fully transparent so the tab
-    // background image shows through around the circular gauge.
     m_gaugeWidget->setAttribute(Qt::WA_AlwaysStackOnTop);
     m_gaugeWidget->setAttribute(Qt::WA_TranslucentBackground);
     m_gaugeWidget->setClearColor(Qt::transparent);
-
-    // Expose 'backend' → this; Gauge.qml accesses backend.currentTemperature
-    // and backend.threshold via Q_PROPERTY bindings.
     m_gaugeWidget->rootContext()->setContextProperty("backend", this);
-
-    // Gauge.qml is embedded via Photos.qrc under prefix "/new/prefix2"
     m_gaugeWidget->setSource(QUrl("qrc:/new/prefix2/Gauge.qml"));
-
     layout->addWidget(m_gaugeWidget, 0, Qt::AlignCenter);
 
-    // Threshold / LED status label
     m_threshInfoLabel = new QLabel(
         QString("Threshold: %1 °C").arg(m_threshold), tab);
     m_threshInfoLabel->setAlignment(Qt::AlignCenter);
@@ -91,11 +95,11 @@ void MainWindow::setupGaugeTab()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Tab 2 – Historical Analysis  (Qt Charts scrolling line graph)
+//  Tab 2 – Historical Analysis
 // ─────────────────────────────────────────────────────────────────────────────
 void MainWindow::setupChartTab()
 {
-    QWidget *tab = ui->tab;                 // "Historical Analysis" tab
+    QWidget *tab = ui->tab;
     auto *layout = new QVBoxLayout(tab);
     layout->setContentsMargins(40, 30, 30, 60);
     layout->setSpacing(40);
@@ -106,7 +110,6 @@ void MainWindow::setupChartTab()
         "color:white; font-size:30px; font-weight:bold; padding:15px;");
     layout->addWidget(title);
 
-    // ── Series ──────────────────────────────────────────────────────────────
     m_tempSeries = new QLineSeries();
     m_tempSeries->setName("Temperature (°C)");
     m_tempSeries->setColor(QColor("#2ecc71"));
@@ -121,11 +124,9 @@ void MainWindow::setupChartTab()
     thp.setWidth(2);
     thp.setStyle(Qt::DashLine);
     m_threshSeries->setPen(thp);
-    // Initialise threshold line across the visible window
     m_threshSeries->append(0,  m_threshold);
     m_threshSeries->append(60, m_threshold);
 
-    // ── Chart ───────────────────────────────────────────────────────────────
     auto *chart = new QChart();
     chart->addSeries(m_tempSeries);
     chart->addSeries(m_threshSeries);
@@ -135,7 +136,6 @@ void MainWindow::setupChartTab()
     chart->legend()->setLabelColor(Qt::white);
     chart->legend()->setBackgroundVisible(false);
 
-    // ── Axes ────────────────────────────────────────────────────────────────
     m_axisX = new QValueAxis();
     m_axisX->setTitleText("Sample");
     m_axisX->setRange(0, 60);
@@ -160,150 +160,270 @@ void MainWindow::setupChartTab()
     m_threshSeries->attachAxis(m_axisX);
     m_threshSeries->attachAxis(m_axisY);
 
-    // ── ChartView ───────────────────────────────────────────────────────────
     m_chartView = new QChartView(chart, tab);
     m_chartView->setRenderHint(QPainter::Antialiasing);
-
     layout->addWidget(m_chartView);
     tab->setLayout(layout);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Networking
+//  Configuration tab: Connect / Disconnect button
+//  Slot name matches Qt's auto-connect convention: on_<objectName>_clicked
 // ─────────────────────────────────────────────────────────────────────────────
-void MainWindow::setupNetworking()
+void MainWindow::on_connectButton_clicked()
 {
-    // TCP server – port 8080
-    m_tcpServer = new QTcpServer(this);
-    connect(m_tcpServer, &QTcpServer::newConnection,
-            this, &MainWindow::onNewTcpConnection);
-
-    if (!m_tcpServer->listen(QHostAddress::Any, 8080)) {
-        qWarning() << "[Server] TCP listen failed:"
-                   << m_tcpServer->errorString();
-    } else {
-        qDebug() << "[Server] TCP listening on port 8080";
+    // If already listening / connected → disconnect
+    if (m_listenNotifier || m_udpNotifier || m_clientFd >= 0) {
+        stopServer();
+        return;
     }
 
-    // UDP socket – port 8081 (bound for future UDP use)
-    m_udpSocket = new QUdpSocket(this);
-    m_udpSocket->bind(QHostAddress::Any, 8081);
+    // Read protocol selection from the .ui checkboxes:
+    //   checkBox   = TCP  (checked by default)
+    //   checkBox_2 = UDP
+    m_connType = ui->checkBox->isChecked()
+                 ? ConnectionType::TCP
+                 : ConnectionType::UDP;
 
-    // Protocol timer – fires every 1 second
-    m_serverTimer = new QTimer(this);
-    m_serverTimer->setInterval(1000);
-    connect(m_serverTimer, &QTimer::timeout,
-            this, &MainWindow::onServerTick);
-    m_serverTimer->start();
+    startServer();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Server protocol tick  (every 1 s)
+//  startServer
+//  Assigns the chosen Socket subclass to ServerChannel and starts listening.
+//  All networking goes through the Socket / Channel OOP interface.
+// ─────────────────────────────────────────────────────────────────────────────
+void MainWindow::startServer()
+{
+    // Polymorphic assignment: ServerChannel holds a Socket* at runtime
+    if (m_connType == ConnectionType::TCP)
+        m_serverChannel.channelSocket = &m_tcpSock;   // TCPSocket → Socket*
+    else
+        m_serverChannel.channelSocket = &m_udpSock;   // UDPSocket → Socket*
+
+    // Call waitForConnect() through the Channel interface.
+    // Returns the fd to watch with QSocketNotifier, or -1 on failure.
+    int listenFd = m_serverChannel.startListening();
+
+    if (listenFd < 0) {
+        m_monitorStatus->setText(
+            "❌  Bind failed — port may be in use. Try again.");
+        m_monitorStatus->setStyleSheet(
+            "color:#e74c3c; font-size:13px; padding:4px;");
+        return;
+    }
+
+    if (m_connType == ConnectionType::TCP) {
+        // Watch the listen fd: becomes readable when a client tries to connect
+        m_listenNotifier = new QSocketNotifier(
+            listenFd, QSocketNotifier::Read, this);
+        connect(m_listenNotifier, &QSocketNotifier::activated,
+                this, &MainWindow::onListenFdActivated);
+
+        m_monitorStatus->setText(
+            "🔶  Listening on TCP :8080 — waiting for client…");
+        m_monitorStatus->setStyleSheet(
+            "color:#f39c12; font-size:13px; padding:4px;");
+
+    } else {
+        // UDP: the bound fd is immediately ready to receive datagrams
+        m_udpNotifier = new QSocketNotifier(
+            listenFd, QSocketNotifier::Read, this);
+        connect(m_udpNotifier, &QSocketNotifier::activated,
+                this, &MainWindow::onUdpFdReadable);
+
+        // UDP is connectionless → start protocol timer immediately
+        m_serverTimer->start();
+
+        m_monitorStatus->setText(
+            "🔶  Listening on UDP :8081 — waiting for client…");
+        m_monitorStatus->setStyleSheet(
+            "color:#f39c12; font-size:13px; padding:4px;");
+    }
+
+    // Lock checkboxes while server is running (prevent mid-session switching)
+    ui->checkBox->setEnabled(false);
+    ui->checkBox_2->setEnabled(false);
+
+    updateConnectButton();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  stopServer — tears down notifiers and sockets via the OOP interface
+// ─────────────────────────────────────────────────────────────────────────────
+void MainWindow::stopServer()
+{
+    m_serverTimer->stop();
+    m_clientFd = -1;
+
+    // Always delete notifiers BEFORE closing file descriptors
+    delete m_listenNotifier; m_listenNotifier = nullptr;
+    delete m_clientNotifier; m_clientNotifier = nullptr;
+    delete m_udpNotifier;    m_udpNotifier    = nullptr;
+
+    // Shut down via Channel → Socket interface (OOP shutdown / polymorphism)
+    m_serverChannel.stop();
+
+    // Re-enable protocol selection
+    ui->checkBox->setEnabled(true);
+    ui->checkBox_2->setEnabled(true);
+
+    m_monitorStatus->setText(
+        "Disconnected — select protocol and press Connect.");
+    m_monitorStatus->setStyleSheet(
+        "color:#aaaaaa; font-size:13px; padding:4px;");
+
+    updateConnectButton();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  QSocketNotifier: TCP listen fd readable → new client is waiting to connect
+// ─────────────────────────────────────────────────────────────────────────────
+void MainWindow::onListenFdActivated(int /*fd*/)
+{
+    if (m_clientFd >= 0) return;   // already have a client — reject second
+
+    // Accept via the TCPSocket object (safe downcast — we know the runtime type)
+    TCPSocket *tcp = static_cast<TCPSocket *>(m_serverChannel.channelSocket);
+    m_clientFd = tcp->acceptConnection();
+
+    if (m_clientFd < 0) {
+        m_monitorStatus->setText("❌  accept() failed.");
+        return;
+    }
+
+    // Watch the new client fd for incoming temperature readings
+    m_clientNotifier = new QSocketNotifier(
+        m_clientFd, QSocketNotifier::Read, this);
+    connect(m_clientNotifier, &QSocketNotifier::activated,
+            this, &MainWindow::onClientFdReadable);
+
+    // Push the current threshold to the client right away
+    sendToClient("set threshold");
+    sendToClient(QString::number(m_threshold, 'f', 1).toStdString());
+
+    m_monitorStatus->setText(
+        QString("✅  TCP client connected (fd %1)").arg(m_clientFd));
+    m_monitorStatus->setStyleSheet(
+        "color:#2ecc71; font-size:13px; padding:4px;");
+
+    m_serverTimer->start();
+    updateConnectButton();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  QSocketNotifier: TCP client fd readable → temperature data has arrived
+// ─────────────────────────────────────────────────────────────────────────────
+void MainWindow::onClientFdReadable(int fd)
+{
+    char buf[256] = {};
+    int n = ::recv(fd, buf, sizeof(buf) - 1, 0);
+
+    if (n <= 0) {
+        // Client closed the connection
+        delete m_clientNotifier;
+        m_clientNotifier = nullptr;
+        ::close(m_clientFd);
+        m_clientFd = -1;
+        m_serverTimer->stop();
+
+        m_monitorStatus->setText(
+            "🔶  TCP client disconnected — waiting for reconnect…");
+        m_monitorStatus->setStyleSheet(
+            "color:#f39c12; font-size:13px; padding:4px;");
+        updateConnectButton();
+        return;
+    }
+
+    buf[n] = '\0';
+    std::string raw(buf);
+    while (!raw.empty() && (raw.back() == '\n' || raw.back() == '\r'))
+        raw.pop_back();
+
+    handleIncomingData(raw);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  QSocketNotifier: UDP fd readable → datagram has arrived
+// ─────────────────────────────────────────────────────────────────────────────
+void MainWindow::onUdpFdReadable(int /*fd*/)
+{
+    // receiveFrom() stores the sender address so sendReply() can reach it
+    UDPSocket *udp = static_cast<UDPSocket *>(m_serverChannel.channelSocket);
+    std::string raw = udp->receiveFrom();
+
+    while (!raw.empty() && (raw.back() == '\n' || raw.back() == '\r'))
+        raw.pop_back();
+
+    if (!raw.empty())
+        handleIncomingData(raw);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Protocol timer tick (every 1 s)
 // ─────────────────────────────────────────────────────────────────────────────
 void MainWindow::onServerTick()
 {
-    if (!m_tcpClient ||
-        m_tcpClient->state() != QAbstractSocket::ConnectedState)
-        return;
+    // TCP: guard against timer firing before a client is accepted
+    if (m_connType == ConnectionType::TCP && m_clientFd < 0) return;
 
     if (m_thresholdDirty) {
-        // Threshold changed via slider → tell the client
         sendToClient("set threshold");
-        sendToClient(QString::number(m_threshold, 'f', 1));
+        sendToClient(QString::number(m_threshold, 'f', 1).toStdString());
         m_thresholdDirty = false;
     } else {
-        // Normal cycle → request current temperature
         sendToClient("get temp");
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  TCP: new client connected
+//  sendToClient — routes through the Socket OOP interface (polymorphism)
 // ─────────────────────────────────────────────────────────────────────────────
-void MainWindow::onNewTcpConnection()
+void MainWindow::sendToClient(const std::string &msg)
 {
-    QTcpSocket *incoming = m_tcpServer->nextPendingConnection();
+    const std::string line = msg + "\n";   // protocol lines are newline-terminated
 
-    // Reject second client if one is already connected
-    if (m_tcpClient &&
-        m_tcpClient->state() == QAbstractSocket::ConnectedState) {
-        incoming->disconnectFromHost();
-        incoming->deleteLater();
-        return;
+    if (m_connType == ConnectionType::TCP) {
+        if (m_clientFd < 0) return;
+        // Calls TCPSocket::send() via the Socket* pointer — polymorphism
+        m_serverChannel.channelSocket->send(line);
+    } else {
+        // UDP: sendReply() addresses the last sender captured by receiveFrom()
+        static_cast<UDPSocket *>(m_serverChannel.channelSocket)->sendReply(line);
     }
-
-    m_tcpClient = incoming;
-    connect(m_tcpClient, &QTcpSocket::readyRead,
-            this, &MainWindow::onTcpDataReceived);
-    connect(m_tcpClient, &QTcpSocket::disconnected,
-            this, &MainWindow::onTcpClientDisconnected);
-
-    const QString ip = m_tcpClient->peerAddress().toString();
-    qDebug() << "[Server] Client connected:" << ip;
-    m_monitorStatus->setText("Client connected: " + ip);
-
-    // Send initial threshold immediately
-    sendToClient("set threshold");
-    sendToClient(QString::number(m_threshold, 'f', 1));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  TCP: data received from client (temperature reading as plain number string)
+//  handleIncomingData — parse temperature reading and update GUI
 // ─────────────────────────────────────────────────────────────────────────────
-void MainWindow::onTcpDataReceived()
+void MainWindow::handleIncomingData(const std::string &raw)
 {
-    const QByteArray raw = m_tcpClient->readAll().trimmed();
-    const QString    msg = QString::fromUtf8(raw);
-    qDebug() << "[Server] Received:" << msg;
-
     bool ok = false;
-    double temp = msg.toDouble(&ok);
+    double temp = QString::fromStdString(raw).toDouble(&ok);
     if (!ok) return;
 
     m_temperature = temp;
     emit temperatureChanged(m_temperature);
-
     addTemperatureSample(m_temperature);
     updateInfoLabel();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  TCP: client disconnected
+//  Chart helper
 // ─────────────────────────────────────────────────────────────────────────────
-void MainWindow::onTcpClientDisconnected()
-{
-    qDebug() << "[Server] Client disconnected.";
-    m_tcpClient->deleteLater();
-    m_tcpClient = nullptr;
-    m_monitorStatus->setText("Client disconnected — waiting for reconnect…");
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Helpers
-// ─────────────────────────────────────────────────────────────────────────────
-void MainWindow::sendToClient(const QString &msg)
-{
-    if (!m_tcpClient) return;
-    m_tcpClient->write((msg + "\n").toUtf8());
-}
-
 void MainWindow::addTemperatureSample(double temp)
 {
-    // ── Add point to temp series ─────────────────────────────────────────
     m_tempSeries->append(m_sampleIndex, temp);
     ++m_sampleIndex;
 
-    // ── Scroll X window (keep last 60 samples) ───────────────────────────
     int xMin = qMax(0, m_sampleIndex - 60);
     int xMax = qMax(60, m_sampleIndex);
     m_axisX->setRange(xMin, xMax);
 
-    // ── Update threshold line to match current X window ──────────────────
     m_threshSeries->clear();
     m_threshSeries->append(xMin, m_threshold);
     m_threshSeries->append(xMax, m_threshold);
 
-    // ── Auto-scale Y to keep both temp + threshold in view ───────────────
     double yMin = qMin(temp, m_threshold) - 10.0;
     double yMax = qMax(temp, m_threshold) + 10.0;
     m_axisY->setRange(qMax(0.0, yMin), qMin(150.0, yMax));
@@ -318,6 +438,38 @@ void MainWindow::updateInfoLabel()
             .arg(m_temperature, 0, 'f', 1)
             .arg(m_threshold,   0, 'f', 1)
             .arg(ledOn ? "ON  🔴" : "OFF  🟢"));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  updateConnectButton — reflects current server state in the UI
+// ─────────────────────────────────────────────────────────────────────────────
+void MainWindow::updateConnectButton()
+{
+    const bool active = (m_listenNotifier || m_udpNotifier || m_clientFd >= 0);
+
+    if (active) {
+        ui->connectButton->setText("Disconnect");
+        ui->connectButton->setStyleSheet(
+            "QPushButton {"
+            "  background-color: #e74c3c;"
+            "  color: white;"
+            "  font-weight: bold;"
+            "  border-radius: 6px;"
+            "  padding: 6px 16px;"
+            "}"
+            "QPushButton:hover { background-color: #c0392b; }");
+    } else {
+        ui->connectButton->setText("Connect");
+        ui->connectButton->setStyleSheet(
+            "QPushButton {"
+            "  background-color: #2ecc71;"
+            "  color: #1a1a2e;"
+            "  font-weight: bold;"
+            "  border-radius: 6px;"
+            "  padding: 6px 16px;"
+            "}"
+            "QPushButton:hover { background-color: #27ae60; }");
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -357,9 +509,3 @@ void MainWindow::on_pushButton_3_clicked()
     QDesktopServices::openUrl(
         QUrl("https://www.instagram.com/edgesfortraining/"));
 }
-
-void MainWindow::on_connectButton_clicked()
-{
-
-}
-

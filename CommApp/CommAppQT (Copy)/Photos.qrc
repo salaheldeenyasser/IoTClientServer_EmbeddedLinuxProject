@@ -1,0 +1,11 @@
+<RCC>
+    <qresource prefix="/new/prefix1">
+        <file>Imagesandicons/Background.jpg</file>
+        <file>Imagesandicons/facebook-app-symbol.png</file>
+        <file>Imagesandicons/instagram.png</file>
+        <file>Imagesandicons/linkedin.png</file>
+    </qresource>
+    <qresource prefix="/new/prefix2">
+        <file>Gauge.qml</file>
+    </qresource>
+</RCC>

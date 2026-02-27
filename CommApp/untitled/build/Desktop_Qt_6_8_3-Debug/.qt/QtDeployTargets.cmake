@@ -1,0 +1,2 @@
+set(__QT_DEPLOY_TARGET_IoTServer_FILE /home/seyho/Embedded_Linux_Diploma/EmbeddedLinuxFinalProject/CommApp/untitled/build/Desktop_Qt_6_8_3-Debug/IoTServer)
+set(__QT_DEPLOY_TARGET_IoTServer_TYPE EXECUTABLE)

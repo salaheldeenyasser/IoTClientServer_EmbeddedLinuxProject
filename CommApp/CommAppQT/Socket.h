@@ -1,6 +1,26 @@
 #ifndef SOCKET_H
 #define SOCKET_H
 
+/**
+ * Socket.h
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Abstract base class  : Socket
+ * Concrete classes     : TCPSocket, UDPSocket
+ *
+ * OOP concepts:
+ *  • Abstraction   – pure-virtual interface
+ *  • Encapsulation – raw fd is private; exposed only via fd()
+ *  • Inheritance   – TCPSocket / UDPSocket derive from Socket
+ *  • Polymorphism  – ServerChannel holds Socket* at runtime
+ *
+ * Qt integration note:
+ *  The server side (MainWindow) uses QSocketNotifier to watch the file
+ *  descriptors returned by fd() so incoming data fires Qt signals without
+ *  blocking the GUI thread.  No Qt networking headers (QTcpServer etc.)
+ *  are used anywhere in the project.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -9,231 +29,224 @@
 #include <string>
 #include <iostream>
 
+// ── Abstract base ─────────────────────────────────────────────────────────────
 class Socket
 {
 public:
     virtual ~Socket() = default;
 
-    virtual int waitForConnect() = 0;
+    /** Server side: bind + listen + accept (TCP) or just bind (UDP).
+     *  Returns the connected/bound file descriptor, or -1 on error.   */
+    virtual int  waitForConnect()                   = 0;
 
-    virtual int connect() = 0;
+    /** Client side: connect to server.
+     *  Returns 0 on success, -1 on failure.                            */
+    virtual int  connect()                          = 0;
 
-    virtual void send(const std::string &message) = 0;
+    /** Send a message over the socket.                                  */
+    virtual void send(const std::string &message)   = 0;
 
-    virtual void receive() = 0;
+    /** Receive data; prints to stdout (used by client terminal).        */
+    virtual void receive()                          = 0;
 
-    virtual void shutdown() = 0;
+    /** Close the socket.                                                */
+    virtual void shutdown()                         = 0;
+
+    /** Expose the raw file descriptor so callers can use QSocketNotifier
+     *  or perform line-at-a-time reads without subclassing.             */
+    virtual int  fd() const = 0;
 };
 
+// ── TCPSocket ─────────────────────────────────────────────────────────────────
 class TCPSocket : public Socket
 {
 private:
-    int sockfd;
-    struct sockaddr_in server_addr;
-    struct sockaddr_in client_addr;
-    socklen_t addr_len;
+    int                m_listenFd  = -1;   // listener (server only)
+    int                m_sockfd    = -1;   // connected socket
+    struct sockaddr_in m_serverAddr{};
+    struct sockaddr_in m_clientAddr{};
+    socklen_t          m_addrLen   = sizeof(m_clientAddr);
 
 public:
-    TCPSocket() : sockfd(-1), addr_len(sizeof(client_addr))
+    TCPSocket()
     {
-        std::memset(&server_addr, 0, sizeof(server_addr));
-        std::memset(&client_addr, 0, sizeof(client_addr));
+        std::memset(&m_serverAddr, 0, sizeof(m_serverAddr));
+        std::memset(&m_clientAddr, 0, sizeof(m_clientAddr));
     }
 
-    ~TCPSocket() override
-    {
-        if (sockfd != -1)
-            ::close(sockfd);
-    }
+    ~TCPSocket() override { shutdown(); }
 
+    // ── Server: bind → listen → accept ───────────────────────────────────────
     int waitForConnect() override
     {
-        sockfd = ::socket(AF_INET, SOCK_STREAM, 0);
-        if (sockfd < 0)
-        {
-            std::cerr << "[TCPSocket] socket() failed\n";
-            return -1;
-        }
+        m_listenFd = ::socket(AF_INET, SOCK_STREAM, 0);
+        if (m_listenFd < 0) { std::cerr << "[TCPSocket] socket() failed\n"; return -1; }
 
         int opt = 1;
-        setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+        setsockopt(m_listenFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
-        server_addr.sin_family = AF_INET;
-        server_addr.sin_addr.s_addr = INADDR_ANY;
-        server_addr.sin_port = htons(8080);
+        m_serverAddr.sin_family      = AF_INET;
+        m_serverAddr.sin_addr.s_addr = INADDR_ANY;
+        m_serverAddr.sin_port        = htons(8080);
 
-        if (::bind(sockfd,
-                   reinterpret_cast<sockaddr *>(&server_addr),
-                   sizeof(server_addr)) < 0)
+        if (::bind(m_listenFd,
+                   reinterpret_cast<sockaddr*>(&m_serverAddr),
+                   sizeof(m_serverAddr)) < 0)
         {
             std::cerr << "[TCPSocket] bind() failed\n";
-            return -1;
+            ::close(m_listenFd); m_listenFd = -1; return -1;
         }
 
-        ::listen(sockfd, 5);
-        std::cout << "[TCPSocket] Waiting for client…\n";
-
-        int client_sock = ::accept(sockfd,
-                                   reinterpret_cast<sockaddr *>(&client_addr),
-                                   &addr_len);
-        if (client_sock < 0)
-        {
-            std::cerr << "[TCPSocket] accept() failed\n";
-            return -1;
+        if (::listen(m_listenFd, 5) < 0) {
+            std::cerr << "[TCPSocket] listen() failed\n";
+            ::close(m_listenFd); m_listenFd = -1; return -1;
         }
 
-        ::close(sockfd);
-        sockfd = client_sock;
-        std::cout << "[TCPSocket] Client connected.\n";
-        return 0;
+        // Return the *listen* fd — MainWindow watches it with QSocketNotifier.
+        // When readable, MainWindow calls acceptConnection().
+        return m_listenFd;
     }
 
+    /** Accept a pending connection.  Call after waitForConnect() signals
+     *  the listen fd is readable.  Returns the new connected fd.        */
+    int acceptConnection()
+    {
+        m_sockfd = ::accept(m_listenFd,
+                            reinterpret_cast<sockaddr*>(&m_clientAddr),
+                            &m_addrLen);
+        return m_sockfd;
+    }
+
+    /** fd() returns the *connected* socket (used for send/recv/notifier). */
+    int fd() const override { return m_sockfd; }
+
+    /** The listening fd (needed to close it separately).                */
+    int listenFd() const { return m_listenFd; }
+
+    // ── Client: connect to server ─────────────────────────────────────────────
     int connect() override
     {
-        sockfd = ::socket(AF_INET, SOCK_STREAM, 0);
-        if (sockfd < 0)
-        {
-            std::cerr << "[TCPSocket] socket() failed\n";
-            return -1;
-        }
+        m_sockfd = ::socket(AF_INET, SOCK_STREAM, 0);
+        if (m_sockfd < 0) { std::cerr << "[TCPSocket] socket() failed\n"; return -1; }
 
-        server_addr.sin_family = AF_INET;
-        server_addr.sin_port = htons(8080);
-        inet_pton(AF_INET, "127.0.0.1", &server_addr.sin_addr);
+        m_serverAddr.sin_family = AF_INET;
+        m_serverAddr.sin_port   = htons(8080);
+        inet_pton(AF_INET, "127.0.0.1", &m_serverAddr.sin_addr);
 
-        if (::connect(sockfd,
-                      reinterpret_cast<sockaddr *>(&server_addr),
-                      sizeof(server_addr)) < 0)
+        if (::connect(m_sockfd,
+                      reinterpret_cast<sockaddr*>(&m_serverAddr),
+                      sizeof(m_serverAddr)) < 0)
         {
             std::cerr << "[TCPSocket] connect() failed\n";
-            ::close(sockfd);
-            sockfd = -1;
-            return -1;
+            ::close(m_sockfd); m_sockfd = -1; return -1;
         }
-
-        std::cout << "[TCPSocket] Connected to server.\n";
         return 0;
     }
 
     void send(const std::string &message) override
     {
-        if (sockfd < 0)
-            return;
-        ::send(sockfd, message.c_str(), message.size(), 0);
+        if (m_sockfd < 0) return;
+        ::send(m_sockfd, message.c_str(), message.size(), 0);
     }
 
     void receive() override
     {
-        if (sockfd < 0)
-            return;
-        char buffer[1024];
-        int n = ::recv(sockfd, buffer, sizeof(buffer) - 1, 0);
-        if (n > 0)
-        {
-            buffer[n] = '\0';
-            std::cout << "[TCPSocket] Received: " << buffer << "\n";
-        }
+        if (m_sockfd < 0) return;
+        char buf[1024];
+        int n = ::recv(m_sockfd, buf, sizeof(buf) - 1, 0);
+        if (n > 0) { buf[n] = '\0'; std::cout << "[TCP] Received: " << buf << "\n"; }
     }
 
     void shutdown() override
     {
-        if (sockfd != -1)
-        {
-            ::close(sockfd);
-            sockfd = -1;
-        }
+        if (m_sockfd   >= 0) { ::close(m_sockfd);   m_sockfd   = -1; }
+        if (m_listenFd >= 0) { ::close(m_listenFd); m_listenFd = -1; }
     }
-
-    int fd() const { return sockfd; }
 };
 
+// ── UDPSocket ─────────────────────────────────────────────────────────────────
 class UDPSocket : public Socket
 {
 private:
-    int sockfd;
-    struct sockaddr_in remote_addr; 
-    socklen_t addr_len;
+    int                m_sockfd = -1;
+    struct sockaddr_in m_remoteAddr{};
+    socklen_t          m_addrLen = sizeof(m_remoteAddr);
 
 public:
-    UDPSocket() : sockfd(-1), addr_len(sizeof(remote_addr))
-    {
-        std::memset(&remote_addr, 0, sizeof(remote_addr));
-    }
+    UDPSocket() { std::memset(&m_remoteAddr, 0, sizeof(m_remoteAddr)); }
+    ~UDPSocket() override { shutdown(); }
 
-    ~UDPSocket() override
-    {
-        if (sockfd != -1)
-            ::close(sockfd);
-    }
-
+    // ── Server: bind ──────────────────────────────────────────────────────────
     int waitForConnect() override
     {
-        sockfd = ::socket(AF_INET, SOCK_DGRAM, 0);
-        if (sockfd < 0)
-        {
-            std::cerr << "[UDPSocket] socket() failed\n";
-            return -1;
-        }
+        m_sockfd = ::socket(AF_INET, SOCK_DGRAM, 0);
+        if (m_sockfd < 0) { std::cerr << "[UDPSocket] socket() failed\n"; return -1; }
 
-        remote_addr.sin_family = AF_INET;
-        remote_addr.sin_addr.s_addr = INADDR_ANY;
-        remote_addr.sin_port = htons(8081);
+        m_remoteAddr.sin_family      = AF_INET;
+        m_remoteAddr.sin_addr.s_addr = INADDR_ANY;
+        m_remoteAddr.sin_port        = htons(8081);
 
-        if (::bind(sockfd,
-                   reinterpret_cast<sockaddr *>(&remote_addr),
-                   sizeof(remote_addr)) < 0)
+        if (::bind(m_sockfd,
+                   reinterpret_cast<sockaddr*>(&m_remoteAddr),
+                   sizeof(m_remoteAddr)) < 0)
         {
             std::cerr << "[UDPSocket] bind() failed\n";
-            return -1;
+            ::close(m_sockfd); m_sockfd = -1; return -1;
         }
-        std::cout << "[UDPSocket] Bound on port 8081.\n";
-        return 0;
+        std::cout << "[UDPSocket] Bound on port 8081\n";
+        return m_sockfd;   // watch this fd for incoming datagrams
     }
 
     int connect() override
     {
-        sockfd = ::socket(AF_INET, SOCK_DGRAM, 0);
-        if (sockfd < 0)
-        {
-            std::cerr << "[UDPSocket] socket() failed\n";
-            return -1;
-        }
-        remote_addr.sin_family = AF_INET;
-        remote_addr.sin_port = htons(8081);
-        inet_pton(AF_INET, "127.0.0.1", &remote_addr.sin_addr);
+        m_sockfd = ::socket(AF_INET, SOCK_DGRAM, 0);
+        if (m_sockfd < 0) { std::cerr << "[UDPSocket] socket() failed\n"; return -1; }
+        m_remoteAddr.sin_family = AF_INET;
+        m_remoteAddr.sin_port   = htons(8081);
+        inet_pton(AF_INET, "127.0.0.1", &m_remoteAddr.sin_addr);
         return 0;
     }
 
     void send(const std::string &message) override
     {
-        if (sockfd < 0)
-            return;
-        ::sendto(sockfd, message.c_str(), message.size(), 0,
-                 reinterpret_cast<sockaddr *>(&remote_addr), sizeof(remote_addr));
+        if (m_sockfd < 0) return;
+        ::sendto(m_sockfd, message.c_str(), message.size(), 0,
+                 reinterpret_cast<sockaddr*>(&m_remoteAddr), sizeof(m_remoteAddr));
     }
 
     void receive() override
     {
-        if (sockfd < 0)
-            return;
-        char buffer[1024];
-        int n = ::recvfrom(sockfd, buffer, sizeof(buffer) - 1, 0,
-                           reinterpret_cast<sockaddr *>(&remote_addr), &addr_len);
-        if (n > 0)
-        {
-            buffer[n] = '\0';
-            std::cout << "[UDPSocket] Received: " << buffer << "\n";
-        }
+        if (m_sockfd < 0) return;
+        char buf[1024];
+        int n = ::recvfrom(m_sockfd, buf, sizeof(buf) - 1, 0,
+                           reinterpret_cast<sockaddr*>(&m_remoteAddr), &m_addrLen);
+        if (n > 0) { buf[n] = '\0'; std::cout << "[UDP] Received: " << buf << "\n"; }
+    }
+
+    /** Receive a datagram and return its content as std::string.
+     *  Also captures the sender address so we can reply.               */
+    std::string receiveFrom()
+    {
+        char buf[1024];
+        int n = ::recvfrom(m_sockfd, buf, sizeof(buf) - 1, 0,
+                           reinterpret_cast<sockaddr*>(&m_remoteAddr), &m_addrLen);
+        if (n > 0) { buf[n] = '\0'; return std::string(buf); }
+        return {};
+    }
+
+    void sendReply(const std::string &message)
+    {
+        // Send back to whichever address last called receiveFrom()
+        ::sendto(m_sockfd, message.c_str(), message.size(), 0,
+                 reinterpret_cast<sockaddr*>(&m_remoteAddr), sizeof(m_remoteAddr));
     }
 
     void shutdown() override
     {
-        if (sockfd != -1)
-        {
-            ::close(sockfd);
-            sockfd = -1;
-        }
+        if (m_sockfd >= 0) { ::close(m_sockfd); m_sockfd = -1; }
     }
+
+    int fd() const override { return m_sockfd; }
 };
 
-#endif 
+#endif // SOCKET_H
