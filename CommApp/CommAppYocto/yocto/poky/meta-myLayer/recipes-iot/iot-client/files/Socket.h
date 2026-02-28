@@ -1,21 +1,8 @@
 #ifndef SOCKET_H
 #define SOCKET_H
 
-/**
- * Socket.h
- * ─────────────────────────────────────────────────────────────────────────────
- * Abstract base class  : Socket
- * Concrete classes     : TCPSocket, UDPSocket
- *
- * OOP concepts applied:
- *   • Abstraction    – Socket defines the interface with pure-virtual functions.
- *   • Encapsulation  – Raw socket descriptors are private; behaviour is exposed
- *                      only through the public API.
- *   • Inheritance    – TCPSocket and UDPSocket inherit from Socket.
- *   • Polymorphism   – Channel holds a Socket*, calling the right implementation
- *                      at runtime.
- * ─────────────────────────────────────────────────────────────────────────────
- */
+
+
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -25,29 +12,29 @@
 #include <string>
 #include <iostream>
 
-// ── Abstract base ─────────────────────────────────────────────────────────────
+
 class Socket
 {
 public:
     virtual ~Socket() = default;
 
-    /** Server side: bind, listen, accept – returns 0 on success. */
+    
     virtual int  waitForConnect()                        = 0;
 
-    /** Client side: connect to server – returns 0 on success. */
+    
     virtual int  connect()                               = 0;
 
-    /** Send a message over the socket. */
+    
     virtual void send(const std::string &message)        = 0;
 
-    /** Receive data and print to stdout. */
+    
     virtual void receive()                               = 0;
 
-    /** Close the socket. */
+    
     virtual void shutdown()                              = 0;
 };
 
-// ── TCP implementation ────────────────────────────────────────────────────────
+
 class TCPSocket : public Socket
 {
 private:
@@ -68,7 +55,7 @@ public:
         if (sockfd != -1) ::close(sockfd);
     }
 
-    // ── Server: bind → listen → accept ───────────────────────────────────
+    
     int waitForConnect() override
     {
         sockfd = ::socket(AF_INET, SOCK_STREAM, 0);
@@ -77,7 +64,7 @@ public:
             return -1;
         }
 
-        // Allow address reuse between runs
+        
         int opt = 1;
         setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
@@ -103,13 +90,13 @@ public:
             return -1;
         }
 
-        ::close(sockfd);   // close listener; use the accepted socket
+        ::close(sockfd);   
         sockfd = client_sock;
         std::cout << "[TCPSocket] Client connected.\n";
         return 0;
     }
 
-    // ── Client: connect to server ─────────────────────────────────────────
+    
     int connect() override
     {
         sockfd = ::socket(AF_INET, SOCK_STREAM, 0);
@@ -160,16 +147,16 @@ public:
         }
     }
 
-    /** Expose the raw fd so Channel subclasses can do line-at-a-time I/O. */
+    
     int fd() const { return sockfd; }
 };
 
-// ── UDP implementation ────────────────────────────────────────────────────────
+
 class UDPSocket : public Socket
 {
 private:
     int                sockfd;
-    struct sockaddr_in remote_addr;   // peer address (set after first recv or connect)
+    struct sockaddr_in remote_addr;   
     socklen_t          addr_len;
 
 public:
@@ -183,7 +170,7 @@ public:
         if (sockfd != -1) ::close(sockfd);
     }
 
-    // ── Server: bind ──────────────────────────────────────────────────────
+    
     int waitForConnect() override
     {
         sockfd = ::socket(AF_INET, SOCK_DGRAM, 0);
@@ -206,7 +193,7 @@ public:
         return 0;
     }
 
-    // ── Client: set up remote address ─────────────────────────────────────
+    
     int connect() override
     {
         sockfd = ::socket(AF_INET, SOCK_DGRAM, 0);
@@ -248,4 +235,4 @@ public:
     }
 };
 
-#endif // SOCKET_H
+#endif 

@@ -1,8 +1,3 @@
-# recipes-connectivity/network-config/network-config_1.0.bb
-# ─────────────────────────────────────────────────────────────────────────────
-# Installs a static IP configuration for eth0 via systemd-networkd.
-# Edit files/10-eth0.network before building to set your lab network address.
-# ─────────────────────────────────────────────────────────────────────────────
 
 SUMMARY     = "Static network configuration for Raspberry Pi 5 IoT client"
 LICENSE     = "MIT"
@@ -21,5 +16,4 @@ do_install() {
 
 FILES:${PN} += "${sysconfdir}/systemd/network/10-eth0.network"
 
-# Enable systemd-networkd in the image
 RRECOMMENDS:${PN} = "systemd-networkd"

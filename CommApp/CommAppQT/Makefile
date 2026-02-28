@@ -1,16 +1,3 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# Makefile  –  IoT QEMU Client Application
-# ─────────────────────────────────────────────────────────────────────────────
-#
-# Native build:
-#   make
-#
-# Cross-compile with Yocto SDK (after sourcing the SDK env script):
-#   make CXX=aarch64-poky-linux-g++ SYSROOT=<path-to-sysroot>
-#
-# Install to QEMU rootfs (adjust DESTDIR):
-#   make install DESTDIR=/tmp/qemu-rootfs
-# ─────────────────────────────────────────────────────────────────────────────
 
 CXX      ?= g++
 CXXFLAGS  = -std=c++17 -Wall -Wextra -O2

@@ -1,8 +1,3 @@
-# recipes-core/packagegroups/packagegroup-iot-client.bb
-# ─────────────────────────────────────────────────────────────────────────────
-# Package group that pulls in the IoT client and all its runtime dependencies.
-# Include this in IMAGE_INSTALL instead of listing packages individually.
-# ─────────────────────────────────────────────────────────────────────────────
 
 SUMMARY     = "IoT Client package group for Raspberry Pi 5"
 LICENSE     = "MIT"

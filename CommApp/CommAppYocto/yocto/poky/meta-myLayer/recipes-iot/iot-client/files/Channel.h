@@ -1,26 +1,16 @@
 #ifndef CHANNEL_H
 #define CHANNEL_H
 
-/**
- * Channel.h
- * ─────────────────────────────────────────────────────────────────────────────
- * Abstract base class  : Channel
- * Concrete classes     : ServerChannel, ClientChannel
- *
- * A Channel owns a pointer to a Socket (composition + polymorphism).
- * The concrete Channel subclass determines how the socket is started (server
- * waits for a connection; client initiates one), while all actual data
- * transfer goes through the Socket interface.
- * ─────────────────────────────────────────────────────────────────────────────
- */
+
+
 
 #include "Socket.h"
 
-// ── Abstract base ─────────────────────────────────────────────────────────────
+
 class Channel
 {
 public:
-    Socket *channelSocket = nullptr;   ///< Owned externally; set before start().
+    Socket *channelSocket = nullptr;   
 
     virtual ~Channel() = default;
 
@@ -30,11 +20,11 @@ public:
     virtual void receive()                        = 0;
 };
 
-// ── Server channel ────────────────────────────────────────────────────────────
+
 class ServerChannel : public Channel
 {
 public:
-    /** Block until a client connects (TCP) or socket is bound (UDP). */
+    
     void start() override
     {
         if (channelSocket) channelSocket->waitForConnect();
@@ -56,11 +46,11 @@ public:
     }
 };
 
-// ── Client channel ────────────────────────────────────────────────────────────
+
 class ClientChannel : public Channel
 {
 public:
-    /** Connect to the server. Returns 0 on success, –1 on failure. */
+    
     void start() override
     {
         if (channelSocket) channelSocket->connect();
@@ -82,4 +72,4 @@ public:
     }
 };
 
-#endif // CHANNEL_H
+#endif 
