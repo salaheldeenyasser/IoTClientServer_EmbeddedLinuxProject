@@ -325,7 +325,7 @@ void MainWindow::onClientFdReadable(int fd)
         // Client closed the connection
         delete m_clientNotifier;
         m_clientNotifier = nullptr;
-        ::close(m_clientFd);
+        static_cast<TCPSocket *>(m_serverChannel.channelSocket)->closeClient();
         m_clientFd = -1;
         m_serverTimer->stop();
 

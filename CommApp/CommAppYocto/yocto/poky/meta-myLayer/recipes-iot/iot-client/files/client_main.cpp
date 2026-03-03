@@ -15,6 +15,8 @@
 #include <cstring>
 #include <cerrno>
 #include <stdexcept>
+#include <algorithm>
+#include <cctype>
 
 
 #include <sys/socket.h>
@@ -40,6 +42,8 @@
 
 
 static constexpr const char *CONFIG_FILE = "/etc/iot-client/iot-client.conf";
+
+enum class Protocol { TCP, UDP };
 
 
 
@@ -161,6 +165,21 @@ static std::string readLine(int fd)
     return line;
 }
 
+static std::string trimLine(std::string text)
+{
+    while (!text.empty() && (text.back() == '\n' || text.back() == '\r')) {
+        text.pop_back();
+    }
+    return text;
+}
+
+static Protocol parseProtocol(std::string proto)
+{
+    std::transform(proto.begin(), proto.end(), proto.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+    return (proto == "UDP") ? Protocol::UDP : Protocol::TCP;
+}
+
 
 static void sendLine(int fd, const std::string &msg)
 {
@@ -208,11 +227,19 @@ int main(int argc, char *argv[])
     std::string serverIp = readConfig("SERVER_IP", DEFAULT_SERVER_IP);
     if (argc > 1) serverIp = argv[1];
 
-    std::string portStr = readConfig("SERVER_PORT",
-                                     std::to_string(DEFAULT_SERVER_PORT));
+    std::string protocolStr = readConfig("PROTOCOL", "TCP");
+    if (argc > 2) protocolStr = argv[2];
+    Protocol protocol = parseProtocol(protocolStr);
+
+    const uint16_t defaultPort =
+        (protocol == Protocol::UDP) ? static_cast<uint16_t>(8081)
+                                    : static_cast<uint16_t>(DEFAULT_SERVER_PORT);
+    std::string portStr = readConfig("SERVER_PORT", std::to_string(defaultPort));
     uint16_t port = static_cast<uint16_t>(std::stoi(portStr));
 
-    std::cout << "  [Config] Server : " << serverIp << ":" << port << "\n";
+    std::cout << "  [Config] Protocol: "
+              << (protocol == Protocol::TCP ? "TCP" : "UDP") << "\n";
+    std::cout << "  [Config] Server  : " << serverIp << ":" << port << "\n";
     std::cout << "  [Config] LED GPIO: " << LED_GPIO << "\n\n";
 
     
@@ -223,39 +250,32 @@ int main(int argc, char *argv[])
 
     
     TCPSocket     tcpSocket;
+    UDPSocket     udpSocket;
     ClientChannel clientChannel;
-    clientChannel.channelSocket = &tcpSocket;
-
-    
-    struct sockaddr_in srv{};
-    srv.sin_family = AF_INET;
-    srv.sin_port   = htons(port);
-    if (inet_pton(AF_INET, serverIp.c_str(), &srv.sin_addr) != 1) {
-        std::cerr << "  [Client] Invalid server IP: " << serverIp << "\n";
-        return 1;
+    if (protocol == Protocol::TCP) {
+        tcpSocket.setRemoteEndpoint(serverIp, port);
+        clientChannel.channelSocket = &tcpSocket;
+    } else {
+        udpSocket.setRemoteEndpoint(serverIp, port);
+        clientChannel.channelSocket = &udpSocket;
     }
 
-    
-    int rawFd = -1;
     std::cout << "  [Client] Connecting to " << serverIp << ":" << port << "…\n";
-
     while (g_running) {
-        rawFd = ::socket(AF_INET, SOCK_STREAM, 0);
-        if (rawFd < 0) { perror("socket"); return 1; }
+        clientChannel.start();
+        if (clientChannel.fd() >= 0) break;
 
-        if (::connect(rawFd,
-                      reinterpret_cast<sockaddr *>(&srv),
-                      sizeof(srv)) == 0) break;
-
-        ::close(rawFd);
-        rawFd = -1;
         std::cerr << "  [Client] Connection failed (" << strerror(errno)
                   << ") — retrying in 3 s…\n";
         std::this_thread::sleep_for(std::chrono::seconds(3));
     }
 
-    if (!g_running || rawFd < 0) return 0;
+    if (!g_running || clientChannel.fd() < 0) return 0;
     std::cout << "  [Client] Connected. Awaiting threshold…\n\n";
+
+    if (protocol == Protocol::UDP) {
+        clientChannel.send("hello\n");
+    }
 
     
     double threshold   = 50.0;
@@ -264,7 +284,13 @@ int main(int argc, char *argv[])
 
     
     while (g_running) {
-        std::string cmd = readLine(rawFd);
+        std::string cmd;
+        if (protocol == Protocol::TCP) {
+            cmd = readLine(clientChannel.fd());
+        } else {
+            cmd = static_cast<UDPSocket *>(clientChannel.channelSocket)->receiveFrom();
+            cmd = trimLine(cmd);
+        }
         if (cmd.empty()) {
             std::cout << "  [Client] Server disconnected.\n";
             break;
@@ -274,7 +300,13 @@ int main(int argc, char *argv[])
 
         
         if (cmd == "set threshold") {
-            std::string valStr = readLine(rawFd);
+            std::string valStr;
+            if (protocol == Protocol::TCP) {
+                valStr = readLine(clientChannel.fd());
+            } else {
+                valStr = static_cast<UDPSocket *>(clientChannel.channelSocket)->receiveFrom();
+                valStr = trimLine(valStr);
+            }
             if (valStr.empty()) break;
             try {
                 threshold = std::stod(valStr);
@@ -308,7 +340,7 @@ int main(int argc, char *argv[])
 
             try {
                 temperature = std::stod(input);
-                sendLine(rawFd, std::to_string(temperature));
+                clientChannel.send(std::to_string(temperature) + "\n");
                 std::cout << "  [Client] Sent: " << temperature << " °C\n";
 
                 
@@ -317,7 +349,7 @@ int main(int argc, char *argv[])
                 printLED(temperature, threshold, ledOn);
             } catch (...) {
                 std::cerr << "  [Client] Invalid input — sending 0.0\n";
-                sendLine(rawFd, "0.0");
+                clientChannel.send("0.0\n");
             }
         }
         
@@ -327,7 +359,7 @@ int main(int argc, char *argv[])
     }
 
     
-    if (rawFd >= 0) ::close(rawFd);
+    clientChannel.stop();
     led.set(false);   
     std::cout << "  [Client] Shutdown complete.\n";
     return 0;

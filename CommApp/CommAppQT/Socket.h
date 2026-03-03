@@ -84,10 +84,24 @@ public:
 
     int acceptConnection()
     {
+        if (m_sockfd >= 0)
+        {
+            ::close(m_sockfd);
+            m_sockfd = -1;
+        }
         m_sockfd = ::accept(m_listenFd,
                             reinterpret_cast<sockaddr *>(&m_clientAddr),
                             &m_addrLen);
         return m_sockfd;
+    }
+
+    void closeClient()
+    {
+        if (m_sockfd >= 0)
+        {
+            ::close(m_sockfd);
+            m_sockfd = -1;
+        }
     }
 
     int fd() const override { return m_sockfd; }

@@ -18,6 +18,8 @@ public:
     virtual void stop()                           = 0;
     virtual void send(const std::string &message) = 0;
     virtual void receive()                        = 0;
+
+    int fd() const { return channelSocket ? channelSocket->fd() : -1; }
 };
 
 

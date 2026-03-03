@@ -1,0 +1,14 @@
+# ninja log v5
+4	51	1772551418300751543	.qt/qml_imports/IoTServer_build.cmake	b4fe230e256d5728
+4	51	1772551418300751543	/home/seyho/Embedded_Linux_Diploma/EmbeddedLinuxFinalProject/CommApp/untitled/build/Desktop_Qt_6_8_3-Debug/.qt/qml_imports/IoTServer_build.cmake	b4fe230e256d5728
+51	407	1772551418647961569	IoTServer_autogen/timestamp	87a9eb3c5e5755c8
+51	407	1772551418647961569	IoTServer_autogen/mocs_compilation.cpp	87a9eb3c5e5755c8
+51	407	1772551418647961569	/home/seyho/Embedded_Linux_Diploma/EmbeddedLinuxFinalProject/CommApp/untitled/build/Desktop_Qt_6_8_3-Debug/IoTServer_autogen/timestamp	87a9eb3c5e5755c8
+51	407	1772551418647961569	/home/seyho/Embedded_Linux_Diploma/EmbeddedLinuxFinalProject/CommApp/untitled/build/Desktop_Qt_6_8_3-Debug/IoTServer_autogen/mocs_compilation.cpp	87a9eb3c5e5755c8
+407	428	1772551418676961527	IoTServer_autogen/EWIEGA46WW/qrc_Photos.cpp	d11cdef48d3b4d18
+407	428	1772551418676961527	/home/seyho/Embedded_Linux_Diploma/EmbeddedLinuxFinalProject/CommApp/untitled/build/Desktop_Qt_6_8_3-Debug/IoTServer_autogen/EWIEGA46WW/qrc_Photos.cpp	d11cdef48d3b4d18
+429	506	1772551418755961410	CMakeFiles/IoTServer.dir/IoTServer_autogen/EWIEGA46WW/qrc_Photos.cpp.o	3a0342d13f42c76a
+429	2464	1772551420712958543	CMakeFiles/IoTServer.dir/main.cpp.o	ad0c7f94541a0dfe
+428	2552	1772551420800958414	CMakeFiles/IoTServer.dir/IoTServer_autogen/mocs_compilation.cpp.o	139902435f484a2c
+429	2708	1772551420955958187	CMakeFiles/IoTServer.dir/mainwindow.cpp.o	dea1631214c740d1
+2708	3254	1772551421494957400	IoTServer	213ef506e0b40498

@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/iot_client.dir/client_main.cpp.o -o iot_client 

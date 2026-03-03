@@ -1,0 +1,7 @@
+/home/seyho/Embedded_Linux_Diploma/EmbeddedLinuxFinalProject/CommApp/CommAppYocto/yocto/poky/meta-myLayer/recipes-iot/iot-client/files/build/CMakeFiles/iot_client.dir
+/home/seyho/Embedded_Linux_Diploma/EmbeddedLinuxFinalProject/CommApp/CommAppYocto/yocto/poky/meta-myLayer/recipes-iot/iot-client/files/build/CMakeFiles/edit_cache.dir
+/home/seyho/Embedded_Linux_Diploma/EmbeddedLinuxFinalProject/CommApp/CommAppYocto/yocto/poky/meta-myLayer/recipes-iot/iot-client/files/build/CMakeFiles/rebuild_cache.dir
+/home/seyho/Embedded_Linux_Diploma/EmbeddedLinuxFinalProject/CommApp/CommAppYocto/yocto/poky/meta-myLayer/recipes-iot/iot-client/files/build/CMakeFiles/list_install_components.dir
+/home/seyho/Embedded_Linux_Diploma/EmbeddedLinuxFinalProject/CommApp/CommAppYocto/yocto/poky/meta-myLayer/recipes-iot/iot-client/files/build/CMakeFiles/install.dir
+/home/seyho/Embedded_Linux_Diploma/EmbeddedLinuxFinalProject/CommApp/CommAppYocto/yocto/poky/meta-myLayer/recipes-iot/iot-client/files/build/CMakeFiles/install/local.dir
+/home/seyho/Embedded_Linux_Diploma/EmbeddedLinuxFinalProject/CommApp/CommAppYocto/yocto/poky/meta-myLayer/recipes-iot/iot-client/files/build/CMakeFiles/install/strip.dir
