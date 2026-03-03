@@ -242,31 +242,24 @@ void MainWindow::startServer()
             "color:#f39c12; font-size:13px; padding:4px;");
     }
 
-    // Lock checkboxes while server is running (prevent mid-session switching)
     ui->checkBox->setEnabled(false);
     ui->checkBox_2->setEnabled(false);
 
     updateConnectButton();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  stopServer — tears down notifiers and sockets via the OOP interface
-// ─────────────────────────────────────────────────────────────────────────────
 void MainWindow::stopServer()
 {
     m_serverTimer->stop();
     m_clientFd = -1;
     m_udpClientReady = false;
 
-    // Always delete notifiers BEFORE closing file descriptors
     delete m_listenNotifier; m_listenNotifier = nullptr;
     delete m_clientNotifier; m_clientNotifier = nullptr;
     delete m_udpNotifier;    m_udpNotifier    = nullptr;
 
-    // Shut down via Channel → Socket interface (OOP shutdown / polymorphism)
     m_serverChannel.stop();
 
-    // Re-enable protocol selection
     ui->checkBox->setEnabled(true);
     ui->checkBox_2->setEnabled(true);
 
@@ -278,14 +271,10 @@ void MainWindow::stopServer()
     updateConnectButton();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  QSocketNotifier: TCP listen fd readable → new client is waiting to connect
-// ─────────────────────────────────────────────────────────────────────────────
 void MainWindow::onListenFdActivated(int /*fd*/)
 {
-    if (m_clientFd >= 0) return;   // already have a client — reject second
+    if (m_clientFd >= 0) return;   
 
-    // Accept via the TCPSocket object (safe downcast — we know the runtime type)
     TCPSocket *tcp = static_cast<TCPSocket *>(m_serverChannel.channelSocket);
     m_clientFd = tcp->acceptConnection();
 
@@ -294,13 +283,11 @@ void MainWindow::onListenFdActivated(int /*fd*/)
         return;
     }
 
-    // Watch the new client fd for incoming temperature readings
     m_clientNotifier = new QSocketNotifier(
         m_clientFd, QSocketNotifier::Read, this);
     connect(m_clientNotifier, &QSocketNotifier::activated,
             this, &MainWindow::onClientFdReadable);
 
-    // Push the current threshold to the client right away
     sendToClient("set threshold");
     sendToClient(QString::number(m_threshold, 'f', 1).toStdString());
 
@@ -313,9 +300,6 @@ void MainWindow::onListenFdActivated(int /*fd*/)
     updateConnectButton();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  QSocketNotifier: TCP client fd readable → temperature data has arrived
-// ─────────────────────────────────────────────────────────────────────────────
 void MainWindow::onClientFdReadable(int fd)
 {
     char buf[256] = {};
@@ -345,9 +329,6 @@ void MainWindow::onClientFdReadable(int fd)
     handleIncomingData(raw);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  QSocketNotifier: UDP fd readable → datagram has arrived
-// ─────────────────────────────────────────────────────────────────────────────
 void MainWindow::onUdpFdReadable(int /*fd*/)
 {
     UDPSocket *udp = static_cast<UDPSocket *>(m_serverChannel.channelSocket);
@@ -372,9 +353,6 @@ void MainWindow::onUdpFdReadable(int /*fd*/)
     handleIncomingData(raw);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Protocol timer tick (every 1 s)
-// ─────────────────────────────────────────────────────────────────────────────
 void MainWindow::onServerTick()
 {
     if (m_connType == ConnectionType::TCP && m_clientFd < 0) return;
@@ -389,26 +367,18 @@ void MainWindow::onServerTick()
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  sendToClient — routes through the Socket OOP interface (polymorphism)
-// ─────────────────────────────────────────────────────────────────────────────
 void MainWindow::sendToClient(const std::string &msg)
 {
-    const std::string line = msg + "\n";   // protocol lines are newline-terminated
+    const std::string line = msg + "\n";   
 
     if (m_connType == ConnectionType::TCP) {
         if (m_clientFd < 0) return;
-        // Calls TCPSocket::send() via the Socket* pointer — polymorphism
         m_serverChannel.channelSocket->send(line);
     } else {
-        // UDP: sendReply() addresses the last sender captured by receiveFrom()
         static_cast<UDPSocket *>(m_serverChannel.channelSocket)->sendReply(line);
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  handleIncomingData — parse temperature reading and update GUI
-// ─────────────────────────────────────────────────────────────────────────────
 void MainWindow::handleIncomingData(const std::string &raw)
 {
     bool ok = false;
@@ -421,9 +391,6 @@ void MainWindow::handleIncomingData(const std::string &raw)
     updateInfoLabel();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Chart helper
-// ─────────────────────────────────────────────────────────────────────────────
 void MainWindow::addTemperatureSample(double temp)
 {
     m_tempSeries->append(m_sampleIndex, temp);
@@ -453,9 +420,6 @@ void MainWindow::updateInfoLabel()
             .arg(ledOn ? "ON  🔴" : "OFF  🟢"));
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  updateConnectButton — reflects current server state in the UI
-// ─────────────────────────────────────────────────────────────────────────────
 void MainWindow::updateConnectButton()
 {
     const bool active = (m_listenNotifier || m_udpNotifier || m_clientFd >= 0);
@@ -485,9 +449,6 @@ void MainWindow::updateConnectButton()
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Configuration tab: slider moved
-// ─────────────────────────────────────────────────────────────────────────────
 void MainWindow::onSliderMoved(int value)
 {
     m_threshold = static_cast<double>(value);
@@ -502,9 +463,6 @@ void MainWindow::onSliderMoved(int value)
     updateInfoLabel();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Quick Access buttons
-// ─────────────────────────────────────────────────────────────────────────────
 void MainWindow::on_pushButton_clicked()
 {
     QDesktopServices::openUrl(
