@@ -356,6 +356,57 @@ On Raspberry Pi 5:
 2. Restart service: `systemctl restart iot-client`
 3. Monitor logs: `journalctl -u iot-client -f`
 
+## Connecting to WiFi Network
+
+To connect your Raspberry Pi 5 to a WiFi network, follow these steps:
+
+### 1. Create the WPA Supplicant Directory
+
+```bash
+mkdir -p /etc/wpa_supplicant
+```
+
+### 2. Create the Configuration File
+
+Write the following configuration to `/etc/wpa_supplicant/wpa_supplicant.conf`:
+
+```conf
+ctrl_interface=/var/run/wpa_supplicant
+update_config=1
+
+network={
+    ssid="YOUR_WIFI_NAME"
+    psk="YOUR_WIFI_PASSWORD"
+}
+```
+
+Replace `YOUR_WIFI_NAME` with your WiFi network name and `YOUR_WIFI_PASSWORD` with your WiFi password.
+
+### 3. Bring Up the WiFi Interface
+
+Run the following commands to establish the connection:
+
+**1. Bring the interface up:**
+```bash
+ifconfig wlan0 up
+```
+
+**2. Start the WPA supplicant (in the background):**
+```bash
+wpa_supplicant -B -i wlan0 -c /etc/wpa_supplicant/wpa_supplicant.conf
+```
+
+**3. Request an IP address via DHCP:**
+```bash
+udhcpc -i wlan0
+```
+
+Your Raspberry Pi 5 should now be connected to the WiFi network. You can verify the connection with:
+```bash
+ifconfig wlan0
+ping -c 4 8.8.8.8
+```
+
 ## Key Features & Design Decisions
 
 ✅ **No Qt Networking Module** - Custom POSIX sockets for learning/control  
