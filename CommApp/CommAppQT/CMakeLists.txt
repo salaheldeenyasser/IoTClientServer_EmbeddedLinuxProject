@@ -8,26 +8,24 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-
 find_package(QT NAMES Qt6 REQUIRED COMPONENTS
     Widgets Charts Quick QuickWidgets Qml)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS
     Widgets Charts Quick QuickWidgets Qml)
-
 
 set(PROJECT_SOURCES
     main.cpp
     mainwindow.cpp
     mainwindow.h
     mainwindow.ui
-    Socket.h
-    Channel.h
+    Socket.h      
+    Channel.h     
 )
 
 qt_add_executable(IoTServer
     MANUAL_FINALIZATION
     ${PROJECT_SOURCES}
-    Photos.qrc
+    Photos.qrc    
 )
 
 target_link_libraries(IoTServer PRIVATE

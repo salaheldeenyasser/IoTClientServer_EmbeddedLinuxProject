@@ -8,10 +8,10 @@
 #include <QPainter>
 #include <QtCharts/QChart>
 
-// POSIX socket API used directly through Socket.h / Channel.h
 #include <sys/socket.h>
 #include <unistd.h>
 #include <cstring>
+#include <cerrno>
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Constructor
@@ -22,7 +22,6 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
-    // ── Configuration tab: slider ─────────────────────────────────────────────
     ui->horizontalSlider->setMinimum(0);
     ui->horizontalSlider->setMaximum(100);
     ui->horizontalSlider->setValue(static_cast<int>(m_threshold));
@@ -30,21 +29,13 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui->horizontalSlider, &QSlider::sliderMoved,
             this, &MainWindow::onSliderMoved);
 
-    // ── Configuration tab: checkboxes ─────────────────────────────────────────
-    // The .ui already sets checkBox (TCP) = checked and wires the two
-    // checkboxes so clicking one toggles the other (mutual exclusion).
-    // No extra code needed here — we simply read isChecked() on Connect.
-
-    // ── Build dynamic tabs ────────────────────────────────────────────────────
     setupGaugeTab();
     setupChartTab();
 
-    // ── Protocol timer — starts only when a client is connected ──────────────
     m_serverTimer = new QTimer(this);
     m_serverTimer->setInterval(1000);
     connect(m_serverTimer, &QTimer::timeout, this, &MainWindow::onServerTick);
 
-    // Set initial button appearance
     updateConnectButton();
 }
 
@@ -168,19 +159,14 @@ void MainWindow::setupChartTab()
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Configuration tab: Connect / Disconnect button
-//  Slot name matches Qt's auto-connect convention: on_<objectName>_clicked
 // ─────────────────────────────────────────────────────────────────────────────
 void MainWindow::on_connectButton_clicked()
 {
-    // If already listening / connected → disconnect
     if (m_listenNotifier || m_udpNotifier || m_clientFd >= 0) {
         stopServer();
         return;
     }
 
-    // Read protocol selection from the .ui checkboxes:
-    //   checkBox   = TCP  (checked by default)
-    //   checkBox_2 = UDP
     m_connType = ui->checkBox->isChecked()
                  ? ConnectionType::TCP
                  : ConnectionType::UDP;
@@ -190,19 +176,14 @@ void MainWindow::on_connectButton_clicked()
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  startServer
-//  Assigns the chosen Socket subclass to ServerChannel and starts listening.
-//  All networking goes through the Socket / Channel OOP interface.
 // ─────────────────────────────────────────────────────────────────────────────
 void MainWindow::startServer()
 {
-    // Polymorphic assignment: ServerChannel holds a Socket* at runtime
     if (m_connType == ConnectionType::TCP)
-        m_serverChannel.channelSocket = &m_tcpSock;   // TCPSocket → Socket*
+        m_serverChannel.channelSocket = &m_tcpSock;
     else
-        m_serverChannel.channelSocket = &m_udpSock;   // UDPSocket → Socket*
+        m_serverChannel.channelSocket = &m_udpSock;
 
-    // Call waitForConnect() through the Channel interface.
-    // Returns the fd to watch with QSocketNotifier, or -1 on failure.
     int listenFd = m_serverChannel.startListening();
 
     if (listenFd < 0) {
@@ -214,7 +195,6 @@ void MainWindow::startServer()
     }
 
     if (m_connType == ConnectionType::TCP) {
-        // Watch the listen fd: becomes readable when a client tries to connect
         m_listenNotifier = new QSocketNotifier(
             listenFd, QSocketNotifier::Read, this);
         connect(m_listenNotifier, &QSocketNotifier::activated,
@@ -226,15 +206,11 @@ void MainWindow::startServer()
             "color:#f39c12; font-size:13px; padding:4px;");
 
     } else {
-        // UDP: the bound fd is immediately ready to receive datagrams
         m_udpClientReady = false;
         m_udpNotifier = new QSocketNotifier(
             listenFd, QSocketNotifier::Read, this);
         connect(m_udpNotifier, &QSocketNotifier::activated,
                 this, &MainWindow::onUdpFdReadable);
-
-        // Do NOT start timer here — wait until the first datagram arrives
-        // so we have the client's address before calling sendReply()
 
         m_monitorStatus->setText(
             "🔶  Listening on UDP :8081 — waiting for client…");
@@ -248,6 +224,9 @@ void MainWindow::startServer()
     updateConnectButton();
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  stopServer — tears down notifiers and sockets via the OOP interface
+// ─────────────────────────────────────────────────────────────────────────────
 void MainWindow::stopServer()
 {
     m_serverTimer->stop();
@@ -271,9 +250,12 @@ void MainWindow::stopServer()
     updateConnectButton();
 }
 
-void MainWindow::onListenFdActivated(int /*fd*/)
+// ─────────────────────────────────────────────────────────────────────────────
+//  QSocketNotifier: TCP listen fd readable → new client is waiting to connect
+// ─────────────────────────────────────────────────────────────────────────────
+void MainWindow::onListenFdActivated(int )
 {
-    if (m_clientFd >= 0) return;   
+    if (m_clientFd >= 0) return;
 
     TCPSocket *tcp = static_cast<TCPSocket *>(m_serverChannel.channelSocket);
     m_clientFd = tcp->acceptConnection();
@@ -288,8 +270,9 @@ void MainWindow::onListenFdActivated(int /*fd*/)
     connect(m_clientNotifier, &QSocketNotifier::activated,
             this, &MainWindow::onClientFdReadable);
 
-    sendToClient("set threshold");
-    sendToClient(QString::number(m_threshold, 'f', 1).toStdString());
+    const std::string threshMsg =
+        "set threshold " + QString::number(m_threshold, 'f', 1).toStdString();
+    sendToClient(threshMsg);
 
     m_monitorStatus->setText(
         QString("✅  TCP client connected (fd %1)").arg(m_clientFd));
@@ -300,17 +283,24 @@ void MainWindow::onListenFdActivated(int /*fd*/)
     updateConnectButton();
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  QSocketNotifier: TCP client fd readable → temperature data has arrived
+// ─────────────────────────────────────────────────────────────────────────────
 void MainWindow::onClientFdReadable(int fd)
 {
-    char buf[256] = {};
+    char buf[512] = {};
     int n = ::recv(fd, buf, sizeof(buf) - 1, 0);
 
     if (n <= 0) {
-        // Client closed the connection
+
+        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+            return;
+
         delete m_clientNotifier;
         m_clientNotifier = nullptr;
-        static_cast<TCPSocket *>(m_serverChannel.channelSocket)->closeClient();
+        ::close(m_clientFd);
         m_clientFd = -1;
+        m_recvBuffer.clear();
         m_serverTimer->stop();
 
         m_monitorStatus->setText(
@@ -321,15 +311,29 @@ void MainWindow::onClientFdReadable(int fd)
         return;
     }
 
-    buf[n] = '\0';
-    std::string raw(buf);
-    while (!raw.empty() && (raw.back() == '\n' || raw.back() == '\r'))
-        raw.pop_back();
 
-    handleIncomingData(raw);
+    m_recvBuffer.append(buf, static_cast<std::size_t>(n));
+
+
+    std::size_t pos;
+    while ((pos = m_recvBuffer.find('\n')) != std::string::npos) {
+        std::string msg = m_recvBuffer.substr(0, pos);
+        m_recvBuffer.erase(0, pos + 1);
+
+
+        if (!msg.empty() && msg.back() == '\r')
+            msg.pop_back();
+
+        if (!msg.empty())
+            handleIncomingData(msg);
+    }
+
 }
 
-void MainWindow::onUdpFdReadable(int /*fd*/)
+// ─────────────────────────────────────────────────────────────────────────────
+//  QSocketNotifier
+// ─────────────────────────────────────────────────────────────────────────────
+void MainWindow::onUdpFdReadable(int )
 {
     UDPSocket *udp = static_cast<UDPSocket *>(m_serverChannel.channelSocket);
     std::string raw = udp->receiveFrom();
@@ -344,8 +348,10 @@ void MainWindow::onUdpFdReadable(int /*fd*/)
         m_udpClientReady = true;
         m_monitorStatus->setText("✅  UDP client connected — receiving data…");
         m_monitorStatus->setStyleSheet("color:#2ecc71; font-size:13px; padding:4px;");
-        sendToClient("set threshold");
-        sendToClient(QString::number(m_threshold, 'f', 1).toStdString());
+
+        const std::string threshMsg =
+            "set threshold " + QString::number(m_threshold, 'f', 1).toStdString();
+        sendToClient(threshMsg);
         m_serverTimer->start();
         updateConnectButton();
     }
@@ -353,32 +359,48 @@ void MainWindow::onUdpFdReadable(int /*fd*/)
     handleIncomingData(raw);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Protocol timer tick (every 1 s)
+// ─────────────────────────────────────────────────────────────────────────────
 void MainWindow::onServerTick()
 {
     if (m_connType == ConnectionType::TCP && m_clientFd < 0) return;
     if (m_connType == ConnectionType::UDP && !m_udpClientReady) return;
 
     if (m_thresholdDirty) {
-        sendToClient("set threshold");
-        sendToClient(QString::number(m_threshold, 'f', 1).toStdString());
+
+        const std::string threshMsg =
+            "set threshold " + QString::number(m_threshold, 'f', 1).toStdString();
+        sendToClient(threshMsg);
         m_thresholdDirty = false;
     } else {
         sendToClient("get temp");
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  sendToClient
+// ─────────────────────────────────────────────────────────────────────────────
 void MainWindow::sendToClient(const std::string &msg)
 {
-    const std::string line = msg + "\n";   
+    const std::string line = msg + "\n";
 
     if (m_connType == ConnectionType::TCP) {
         if (m_clientFd < 0) return;
-        m_serverChannel.channelSocket->send(line);
+
+
+        ssize_t sent = ::send(m_clientFd, line.c_str(), line.size(), MSG_NOSIGNAL);
+        if (sent < 0) {
+            qWarning("[Server] send() failed: %s", strerror(errno));
+        }
     } else {
         static_cast<UDPSocket *>(m_serverChannel.channelSocket)->sendReply(line);
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  handleIncomingData — parse temperature reading and update GUI
+// ─────────────────────────────────────────────────────────────────────────────
 void MainWindow::handleIncomingData(const std::string &raw)
 {
     bool ok = false;
@@ -391,6 +413,9 @@ void MainWindow::handleIncomingData(const std::string &raw)
     updateInfoLabel();
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Chart helper
+// ─────────────────────────────────────────────────────────────────────────────
 void MainWindow::addTemperatureSample(double temp)
 {
     m_tempSeries->append(m_sampleIndex, temp);
@@ -420,6 +445,9 @@ void MainWindow::updateInfoLabel()
             .arg(ledOn ? "ON  🔴" : "OFF  🟢"));
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  updateConnectButton — reflects current server state in the UI
+// ─────────────────────────────────────────────────────────────────────────────
 void MainWindow::updateConnectButton()
 {
     const bool active = (m_listenNotifier || m_udpNotifier || m_clientFd >= 0);
@@ -449,6 +477,9 @@ void MainWindow::updateConnectButton()
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Configuration tab: slider moved
+// ─────────────────────────────────────────────────────────────────────────────
 void MainWindow::onSliderMoved(int value)
 {
     m_threshold = static_cast<double>(value);
@@ -463,6 +494,9 @@ void MainWindow::onSliderMoved(int value)
     updateInfoLabel();
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Quick Access buttons
+// ─────────────────────────────────────────────────────────────────────────────
 void MainWindow::on_pushButton_clicked()
 {
     QDesktopServices::openUrl(

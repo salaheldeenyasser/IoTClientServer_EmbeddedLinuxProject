@@ -1,0 +1,26 @@
+[Unit]
+Description=IoT TCP/UDP Client
+# FIX (Bug 2): wait for the network stack to be fully up with an address
+# assigned before attempting to connect to the server. Without this,
+# the client starts, immediately gets ECONNREFUSED or ENETUNREACH, and
+# the systemd restart loop burns CPU for no benefit.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Update --ip to match your server's static IP address (Bug 3).
+# If the server uses DHCP, assign it a static lease via the router
+# so this value never changes between reboots.
+ExecStart=/usr/bin/iot-client --proto tcp --ip 192.168.1.100 --gpio 17
+# Restart on any non-zero exit so transient network drops self-heal.
+Restart=on-failure
+RestartSec=5
+# Surface stdout/stderr in journalctl -u iot-client for easy debugging.
+StandardOutput=journal
+StandardError=journal
+# Abort startup if the binary is not ready within 30 s.
+TimeoutStartSec=30
+
+[Install]
+WantedBy=multi-user.target

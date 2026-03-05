@@ -1,12 +1,11 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
-
 #include <QMainWindow>
 #include <QDesktopServices>
 #include <QUrl>
 #include <QTimer>
-#include <QSocketNotifier>          
+#include <QSocketNotifier>          // Qt::Core — no Qt networking module needed
 #include <QQuickWidget>
 #include <QQmlContext>
 #include <QtCharts/QChartView>
@@ -48,27 +47,35 @@ signals:
     void thresholdChanged(double threshold);
 
 private slots:
+    // ── Quick Access tab ──────────────────────────────────────────────────────
     void on_pushButton_clicked();
     void on_pushButton_2_clicked();
     void on_pushButton_3_clicked();
 
+    // ── Configuration tab ─────────────────────────────────────────────────────
     void onSliderMoved(int value);
 
+    // Auto-connected by Qt name convention (on_<objectName>_clicked)
     void on_connectButton_clicked();
 
+    // ── Protocol timer (1 s) ─────────────────────────────────────────────────
     void onServerTick();
 
-    void onListenFdActivated(int fd);   
-    void onClientFdReadable(int fd);    
-    void onUdpFdReadable(int fd);       
+    // ── QSocketNotifier callbacks (replaces Qt socket signals) ───────────────
+    void onListenFdActivated(int fd);
+    void onClientFdReadable(int fd);
+    void onUdpFdReadable(int fd);
 
 private:
+    // ── UI ────────────────────────────────────────────────────────────────────
     Ui::MainWindow *ui;
 
+    // Tab 1
     QQuickWidget *m_gaugeWidget     = nullptr;
     QLabel       *m_monitorStatus   = nullptr;
     QLabel       *m_threshInfoLabel = nullptr;
 
+    // Tab 2
     QChartView   *m_chartView       = nullptr;
     QLineSeries  *m_tempSeries      = nullptr;
     QLineSeries  *m_threshSeries    = nullptr;
@@ -76,25 +83,30 @@ private:
     QValueAxis   *m_axisY           = nullptr;
     int           m_sampleIndex     = 0;
 
+    // ── Application state ─────────────────────────────────────────────────────
     double         m_temperature    = 0.0;
     double         m_threshold      = 50.0;
     double         m_prevThreshold  = 50.0;
     bool           m_thresholdDirty = false;
     ConnectionType m_connType       = ConnectionType::TCP;
 
-    TCPSocket      m_tcpSock;          
-    UDPSocket      m_udpSock;          
-    ServerChannel  m_serverChannel;    
+    TCPSocket      m_tcpSock;
+    UDPSocket      m_udpSock;
+    ServerChannel  m_serverChannel;
 
-    int            m_clientFd = -1;    
-    bool           m_udpClientReady = false;  
+    int            m_clientFd = -1;
+    bool           m_udpClientReady = false;
 
-    QSocketNotifier *m_listenNotifier = nullptr;  
-    QSocketNotifier *m_clientNotifier = nullptr;  
-    QSocketNotifier *m_udpNotifier    = nullptr;  
+    std::string    m_recvBuffer;
+
+
+    QSocketNotifier *m_listenNotifier = nullptr;
+    QSocketNotifier *m_clientNotifier = nullptr;
+    QSocketNotifier *m_udpNotifier    = nullptr;
 
     QTimer *m_serverTimer = nullptr;
 
+    // ── Helpers ───────────────────────────────────────────────────────────────
     void setupGaugeTab();
     void setupChartTab();
     void startServer();
@@ -106,4 +118,4 @@ private:
     void updateConnectButton();
 };
 
-#endif 
+#endif // MAINWINDOW_H
