@@ -494,7 +494,8 @@ All source files include MIT license headers. See [COPYING.MIT](CommApp/CommAppY
 
 ## Author & Attribution
 
-**Edges For Training** - Embedded Linux Diploma Program
+**Eng. Salah Eldeen Yasser** - Embedded Sofware Engineer
+**Edges for Training** - Embedded Linux Diploma Program
 
 ---
 
