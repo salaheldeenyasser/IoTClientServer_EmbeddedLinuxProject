@@ -17,17 +17,17 @@ This is an **Embedded Linux Diploma Program** capstone project showcasing:
 ### High-Level Overview
 
 ```
-Raspberry Pi 5 (IoT Client)             Desktop / Laptop (Qt6 Server)
-┌─────────────────────────┐        ┌──────────────────────────┐
-│  Yocto Linux (aarch64)       │        │   Ubuntu/Fedora (x86-64)      │
-│                              │        │                               │
-│  client_main.cpp             |◄─TCP─►│  mainwindow.cpp              │
-│  ├─ Socket.h (POSIX)         │ :8080  │  ├─ Socket.h (POSIX)         │
-│  ├─ Channel.h (OOP)          │        │  ├─ Channel.h (OOP)          │
-│  └─ GPIO LED control         │        │  ├─ Gauge.qml                │
-│                              │        │  ├─ Qt Charts                │
-│  [systemd service]           │        │  └─ Configuration UI         │
-└─────────────────────────┘        └──────────────────────────┘
+Raspberry Pi 5 (IoT Client)         Desktop / Laptop (Qt6 Server)
+┌─────────────────────────┐         ┌──────────────────────────┐
+│  Yocto Linux (aarch64)  │         │  Ubuntu/Fedora (x86-64)  │
+│                         │         │                          │
+│  client_main.cpp        |◄──TCP──►│  mainwindow.cpp          │
+│  ├─ Socket.h (POSIX)    │ :8080   │  ├─ Socket.h (POSIX)     │
+│  ├─ Channel.h (OOP)     │         │  ├─ Channel.h (OOP)      │
+│  └─ GPIO LED control    │         │  ├─ Gauge.qml            │
+│                         │         │  ├─ Qt Charts            │
+│  [systemd service]      │         │  └─ Configuration UI     │
+└─────────────────────────┘         └──────────────────────────┘
 ```
 
 ### Networking Stack
